@@ -1,0 +1,18 @@
+{
+    "mcpServers": {
+        "paper-graph-rag": {
+            "command": "conda",
+            "args": [
+                "run",
+                "--no-banner",
+                "-n",
+                "paper_rag",
+                "python",
+                "/home/kwy7605/paper_graph_rag/mcp_server.py"
+            ],
+            "env": {
+                "LD_LIBRARY_PATH": "/home/kwy7605/miniconda3/envs/paper_rag/lib"
+            }
+        }
+    }
+}

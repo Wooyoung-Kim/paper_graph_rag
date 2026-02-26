@@ -1,0 +1,12 @@
+pymupdf>=1.25
+chromadb>=0.6
+sentence-transformers>=3.0
+langchain>=0.3
+langchain-openai>=0.3
+langchain-anthropic>=0.3
+langchain-community>=0.3
+networkx>=3.0
+click>=8.0
+python-dotenv>=1.0
+pydantic>=2.0
+rich>=13.0
