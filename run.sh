@@ -14,4 +14,4 @@ CONDA_BASE="$(conda info --base 2>/dev/null || echo "$HOME/miniconda3")"
 export LD_LIBRARY_PATH="$CONDA_BASE/envs/$CONDA_ENV/lib:$LD_LIBRARY_PATH"
 
 # Run CLI
-conda run --no-banner -n "$CONDA_ENV" python "$SCRIPT_DIR/cli.py" "$@"
+conda run -n "$CONDA_ENV" python "$SCRIPT_DIR/cli.py" "$@"

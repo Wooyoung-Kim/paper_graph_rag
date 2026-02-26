@@ -332,7 +332,8 @@ def download_pdf(
     Strategy:
     1. PMC Open Access (if PMC ID available)
     2. Unpaywall (if DOI available)
-    3. Fallback: save abstract as text
+    3. Publisher direct via DOI (works on institutional IP)
+    4. Fallback: save abstract as text
 
     Returns:
         Path to downloaded file, or None if all methods fail
@@ -354,6 +355,12 @@ def download_pdf(
         pdf_path = output_dir / f"{base_name}.pdf"
         unpaywall_email = email or os.getenv("NCBI_EMAIL", os.getenv("EMAIL", ""))
         if unpaywall_email and _download_from_unpaywall(article.doi, pdf_path, unpaywall_email):
+            return pdf_path
+
+    # --- Strategy 3: Publisher direct (institutional IP) ---
+    if article.doi:
+        pdf_path = output_dir / f"{base_name}.pdf"
+        if _download_from_publisher(article.doi, pdf_path):
             return pdf_path
 
     # --- Fallback: Save abstract as markdown for parsing ---
@@ -410,6 +417,120 @@ def _download_from_unpaywall(doi: str, output_path: Path, email: str) -> bool:
         print(f"    [WARN] Unpaywall download failed: {e}")
 
     return False
+
+
+def _download_from_publisher(doi: str, output_path: Path) -> bool:
+    """Download PDF directly from publisher via DOI resolution.
+
+    Works when running on institutional IP that has journal access.
+    Resolves DOI to publisher page and tries to find/download the PDF.
+    """
+    headers = {
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    }
+
+    try:
+        # Step 1: Resolve DOI to publisher URL
+        doi_url = f"https://doi.org/{doi}"
+        resp = requests.get(doi_url, headers=headers, timeout=30, allow_redirects=True)
+        if resp.status_code != 200:
+            return False
+
+        final_url = resp.url
+        page_html = resp.text
+
+        # Step 2: Try known publisher PDF URL patterns
+        pdf_url = _resolve_publisher_pdf_url(final_url, page_html, doi)
+        if not pdf_url:
+            return False
+
+        # Step 3: Download PDF
+        pdf_resp = requests.get(pdf_url, headers=headers, timeout=60, allow_redirects=True)
+        content_type = pdf_resp.headers.get("content-type", "")
+
+        if (pdf_resp.status_code == 200
+                and len(pdf_resp.content) > 5000
+                and ("application/pdf" in content_type
+                     or pdf_resp.content[:5] == b"%PDF-")):
+            output_path.write_bytes(pdf_resp.content)
+            return True
+
+    except Exception as e:
+        print(f"    [WARN] Publisher download failed: {e}")
+
+    return False
+
+
+def _resolve_publisher_pdf_url(
+    page_url: str, html: str, doi: str
+) -> str | None:
+    """Try to resolve PDF URL from publisher page URL and HTML."""
+    from urllib.parse import urljoin
+
+    # --- Elsevier / ScienceDirect ---
+    if "sciencedirect.com" in page_url:
+        pii_match = re.search(r'/pii/(S[0-9X-]+)', page_url)
+        if pii_match:
+            return f"https://www.sciencedirect.com/science/article/pii/{pii_match.group(1)}/pdfft"
+
+    # --- Springer / Nature ---
+    if "springer.com" in page_url or "nature.com" in page_url:
+        if "/article/" in page_url:
+            return page_url.rstrip("/") + ".pdf"
+
+    # --- Wiley ---
+    if "onlinelibrary.wiley.com" in page_url:
+        doi_match = re.search(r'/doi/(10\.[^/]+/.+?)(?:/|$)', page_url)
+        if doi_match:
+            return f"https://onlinelibrary.wiley.com/doi/pdfdirect/{doi_match.group(1)}"
+
+    # --- MDPI ---
+    if "mdpi.com" in page_url:
+        return page_url.rstrip("/") + "/pdf"
+
+    # --- Frontiers ---
+    if "frontiersin.org" in page_url:
+        if "/full" in page_url:
+            return page_url.replace("/full", "/pdf")
+
+    # --- Taylor & Francis ---
+    if "tandfonline.com" in page_url:
+        doi_match = re.search(r'/doi/(?:full|abs)/(10\.[^?]+)', page_url)
+        if doi_match:
+            return f"https://www.tandfonline.com/doi/pdf/{doi_match.group(1)}"
+
+    # --- Oxford Academic ---
+    if "academic.oup.com" in page_url:
+        if "/article/" in page_url:
+            # Try PDF endpoint
+            pdf_match = re.search(r'(https?://academic\.oup\.com/[^"]+/article-pdf/[^"]+)', html)
+            if pdf_match:
+                return pdf_match.group(1)
+
+    # --- ACS Publications ---
+    if "pubs.acs.org" in page_url:
+        if "/doi/" in page_url:
+            return page_url.replace("/doi/abs/", "/doi/pdf/").replace("/doi/full/", "/doi/pdf/")
+
+    # --- Generic: look for PDF link in HTML ---
+    pdf_patterns = [
+        r'"(https?://[^"]+\.pdf(?:\?[^"]*)?)"',
+        r"'(https?://[^']+\.pdf(?:\?[^']*)?)'",
+        r'href="([^"]+/pdf[^"]*?)"',
+        r'"pdfUrl"\s*:\s*"([^"]+)"',
+        r'"downloadUrl"\s*:\s*"([^"]+pdf[^"]*)"',
+    ]
+    for pattern in pdf_patterns:
+        match = re.search(pattern, html)
+        if match:
+            url = match.group(1)
+            if not url.startswith("http"):
+                url = urljoin(page_url, url)
+            return url
+
+    return None
 
 
 def _save_as_markdown(article: PubMedArticle, output_path: Path) -> None:
