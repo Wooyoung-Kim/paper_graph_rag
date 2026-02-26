@@ -2,33 +2,49 @@
 
 논문 PDF → 지식 그래프 + Obsidian 노트 + RAG 시스템
 
+## Installation
+
+```bash
+# 1. Clone
+git clone https://github.com/Wooyoung-Kim/paper_graph_rag.git
+cd paper_graph_rag
+
+# 2. Conda 환경 생성 + 의존성 설치
+conda create -n paper_rag python=3.11 -y
+conda activate paper_rag
+pip install -r requirements.txt
+
+# 3. .env 설정 (개체 추출 / RAG 쿼리 시 필요)
+cp .env.template .env
+# .env 파일에서 OPENAI_API_KEY 또는 ANTHROPIC_API_KEY 입력
+
+# 4. 실행 권한
+chmod +x run.sh
+```
+
 ## Quick Start
 
 ```bash
-# 1. .env 설정 (API 키 필수)
-cp .env.template .env
-# .env 파일에서 OPENAI_API_KEY 또는 ANTHROPIC_API_KEY 설정
-
-# 2. PubMed에서 주제별 논문 가져오기
+# PubMed에서 주제별 논문 가져오기 (LLM 불필요)
 ./run.sh fetch "scRNA-seq germinal center B cell" --max 10
 
-# 3. PubMed 검색 + 자동 인제스트 (한 번에)
+# PubMed 검색 + 자동 인제스트 (LLM API 키 필요)
 ./run.sh fetch-ingest "vaccine immune response single cell" --max 5
 
-# 4. 로컬 PDF 인제스트
+# 로컬 PDF 인제스트
 ./run.sh ingest /path/to/paper.pdf          # 단일 PDF
 ./run.sh ingest /path/to/papers/ --batch    # 폴더 전체
 
-# 5. RAG 쿼리
+# RAG 쿼리 (LLM API 키 필요)
 ./run.sh query "BCL6와 germinal center B cell의 관계는?"
 
-# 6. 통계 확인
+# 통계 확인
 ./run.sh stats
 
-# 7. 개체 검색
+# 개체 검색
 ./run.sh search-entity "CD19" --depth 2
 
-# 8. Obsidian vault 열기
+# Obsidian vault 열기
 # data/vault/ 을 Obsidian에서 Open Vault로 열면 Graph View에서 시각화 가능
 ```
 
@@ -79,10 +95,4 @@ LLM_PROVIDER=openai          # or anthropic
 LLM_MODEL=gpt-4o-mini        # or claude-sonnet-4-20250514
 OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=sk-ant-...
-```
-
-## Conda Environment
-
-```bash
-conda activate paper_rag      # Python 3.11
 ```
